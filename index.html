@@ -209,7 +209,7 @@
   }
 
   function calculate(inp){
-    // Your confirmed rules:
+    // Confirmed rules:
     // 1) Z = min(Y, T, A)
     // 2) D = A + (H + I) - (C + L) - Z      (NO B)
     // 3) Q = A - (B + C + L) - D - E
@@ -218,8 +218,7 @@
     // 6) J = F + H, K = G + I
     // 7) P = 0 if rollover (H>0 or I>0) else O * [A - (C + L) - (D + E)]
     //
-    // E rule: E <= F (and E should reduce F). We solve this with a short fixed-point iteration.
-
+    // E rule: E <= F. We solve with a short fixed-point iteration.
     const out = { ...inp };
 
     // Step 1: Z
@@ -229,8 +228,7 @@
     out.D_raw = out.A + out.H + out.I - (out.C + out.L) - out.Z;
     out.D = Math.max(0, out.D_raw);
 
-    // Iterative solve for E effective under constraint E <= F
-    // Start with requested E_input; recompute until stable.
+    // Iteratively solve for effective E under constraint E <= F.
     let E = Math.max(0, out.E_input);
     let clamped = false;
 
@@ -244,7 +242,7 @@
       let G = Math.max(0, N + out.M);
       G = Math.min(G, Q);
 
-      // Step 5: F
+      // Step 5: F (exact formula requested)
       const F_raw = out.A - (out.B + out.C + out.L) - G - (out.D + E);
       const F = Math.max(0, F_raw);
 
