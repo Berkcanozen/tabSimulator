@@ -33,7 +33,6 @@
 
     .row{ display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
     button{ padding:9px 12px; border-radius:8px; border:1px solid var(--border); background:#fff; cursor:pointer; font-weight:600; }
-    button.primary{ background:#111; color:#fff; border-color:#111; }
 
     .list{ display:flex; flex-direction:column; gap:8px; }
     .item{ display:flex; justify-content:space-between; gap:12px; align-items:baseline; padding:8px 10px; border:1px solid var(--border); border-radius:10px; }
@@ -50,7 +49,7 @@
 <body>
 <header>
   <h1>MyTab Simulator</h1>
-  <p>Inputs on the left, calculated outputs on the right. Shareable via GitHub Pages.</p>
+  <p>Inputs on the left, calculated outputs on the right. Auto-calculates on every change.</p>
 </header>
 
 <main class="layout">
@@ -71,7 +70,7 @@
       <div class="hint">Remaining customer tab room after credit</div>
     </div>
 
-    <!-- Remaining inputs in single column alphabetical by letter -->
+    <!-- Remaining inputs single column, alphabetical by letter -->
     <div class="field">
       <label for="A">A — MSRP</label>
       <input id="A" type="number" step="0.01" value="1200" />
@@ -93,19 +92,19 @@
     <div class="field">
       <label for="E">E — Voluntary Upfront Payment</label>
       <input id="E" type="number" step="0.01" value="0" />
-      <div class="hint">Voluntary upfront; reduces Tab Charge (subject to E ≤ F0 rule)</div>
+      <div class="hint">Reduces Tab Charge (subject to E ≤ F0 rule)</div>
     </div>
 
     <div class="field">
       <label for="H">H — Rollover Tab Charge</label>
       <input id="H" type="number" step="0.01" value="0" />
-      <div class="hint">Affects totals only (J = F + H)</div>
+      <div class="hint">Old tab remaining charge</div>
     </div>
 
     <div class="field">
       <label for="I">I — Rollover Tab Savings</label>
       <input id="I" type="number" step="0.01" value="0" />
-      <div class="hint">Affects totals only (K = G + I)</div>
+      <div class="hint">Old tab remaining subsidy</div>
     </div>
 
     <div class="field">
@@ -133,7 +132,6 @@
     </div>
 
     <div class="row">
-      <button class="primary" id="btnRun">Calculate</button>
       <button id="btnReset">Reset</button>
       <button id="btnCopy">Copy JSON</button>
     </div>
@@ -143,21 +141,18 @@
   <section class="results">
     <h2>Outputs</h2>
 
-    <!-- Q BEFORE F, and H/I do not impact F -->
+    <!-- Output order: d e q f g z j k n p -->
     <div class="list">
       <div class="item"><div class="k">D — Required Upfront Payment</div><div class="v" id="outD">—</div></div>
       <div class="item"><div class="k">E (effective) — Voluntary Upfront Used</div><div class="v" id="outE">—</div></div>
-      <div class="item"><div class="k">G — Current Tab Savings</div><div class="v" id="outG">—</div></div>
-      <div class="item"><div class="k">J — Total Tab Charge (F + H)</div><div class="v" id="outJ">—</div></div>
-      <div class="item"><div class="k">K — Total Tab Savings (G + I)</div><div class="v" id="outK">—</div></div>
-      <div class="item"><div class="k">N — Subsidy (min(R, Q))</div><div class="v" id="outN">—</div></div>
-      <div class="item"><div class="k">P — Prepayment</div><div class="v" id="outP">—</div></div>
-
-      <!-- Q BEFORE F -->
       <div class="item"><div class="k">Q — Tab Balance</div><div class="v" id="outQ">—</div></div>
       <div class="item"><div class="k">F — Current Tab Charge (MyTab Charge)</div><div class="v" id="outF">—</div></div>
-
+      <div class="item"><div class="k">G — Current Tab Savings</div><div class="v" id="outG">—</div></div>
       <div class="item"><div class="k">Z — Tab Limit</div><div class="v" id="outZ">—</div></div>
+      <div class="item"><div class="k">J — Total Tab Charge (F + H)</div><div class="v" id="outJ">—</div></div>
+      <div class="item"><div class="k">K — Total Tab Savings (G + I)</div><div class="v" id="outK">—</div></div>
+      <div class="item"><div class="k">N — Subsidy</div><div class="v" id="outN">—</div></div>
+      <div class="item"><div class="k">P — Prepayment</div><div class="v" id="outP">—</div></div>
     </div>
 
     <div class="section">
@@ -216,16 +211,13 @@
     // 1) Z
     out.Z = Math.min(out.Y, out.T, out.A);
 
-    // 2) D — DOES NOT include H/I (so rollover does not impact current tab)
-    // D = max(0, A - (C + L) - Z)
-    out.D_raw = out.A - (out.C + out.L) - out.Z;
+    // 2) D (old expression as requested)
+    // D = A + (H + I) - (B + C + L) - (Z - B)
+    // NOTE: B cancels out algebraically, but kept as the "old" form.
+    out.D_raw = out.A + (out.H + out.I) - (out.B + out.C + out.L) - (out.Z - out.B);
     out.D = Math.max(0, out.D_raw);
 
-    // Voluntary upfront rule:
-    // Let F0 = max(0, A - (B + C + L) - G - D)
-    // Clamp E to E <= F0, then F = F0 - E
-    //
-    // Note: H and I must NOT impact Q/G/F/N/D. They only impact totals J and K.
+    // Voluntary upfront rule: E <= F0 where F0 is tab charge BEFORE applying E.
     const requestedE = Math.max(0, out.E_input);
     let E = requestedE;
     let clamped = false;
@@ -240,17 +232,17 @@
       let G = Math.max(0, N + out.M);
       G = Math.min(G, Q);
 
-      // 5) F0 and clamp E
+      // 5) F0
       const F0_raw = out.A - (out.B + out.C + out.L) - G - out.D;
       const F0 = Math.max(0, F0_raw);
 
+      // Clamp E to F0
       const newE = Math.min(requestedE, F0);
       clamped = clamped || (newE < requestedE);
 
       if (Math.abs(newE - E) < 0.0001){
         out.Q_raw = Q_raw; out.Q = Q;
         out.N = N; out.G = G;
-
         out.F0_raw = F0_raw; out.F0 = F0;
 
         out.E = newE;
@@ -279,11 +271,11 @@
       }
     }
 
-    // 6) Totals — rollover impacts totals only
+    // 6) J, K
     out.J = out.F + out.H;
     out.K = out.G + out.I;
 
-    // 7) Prepayment (rollover excludes)
+    // 7) P (rollover excludes)
     out.rolloverIncluded = (out.H > 0) || (out.I > 0);
     out.P_base = out.A - (out.C + out.L) - (out.D + out.E);
     out.P = out.rolloverIncluded ? 0 : Math.max(0, out.O * out.P_base);
@@ -295,37 +287,15 @@
     return out;
   }
 
-  function render(out){
-    $("outD").textContent = money(out.D);
-    $("outE").textContent = money(out.E);
-    $("outF").textContent = money(out.F);
-    $("outG").textContent = money(out.G);
-    $("outJ").textContent = money(out.J);
-    $("outK").textContent = money(out.K);
-    $("outN").textContent = money(out.N);
-    $("outP").textContent = money(out.P);
-    $("outQ").textContent = money(out.Q);
-    $("outZ").textContent = money(out.Z);
-
-    const checks = [];
-    checks.push(`Z <= A, Y, T: ${(out.Z <= out.A && out.Z <= out.Y && out.Z <= out.T) ? "OK" : "FAIL"}`);
-    checks.push(`E <= F0 (pre-voluntary tab charge): ${(out.E <= out.F0) ? "OK" : "FAIL"}${out.E_clamped ? " (requested E was clamped)" : ""}`);
-    checks.push(`Q == F + G: ${(Math.abs(out.Q_diff) < 0.0001) ? "OK" : "WARN"} (diff: ${out.Q_diff})`);
-    checks.push(`Rollover excludes prepayment: ${out.rolloverIncluded ? (out.P === 0 ? "OK" : "FAIL") : "N/A"}`);
-    $("checks").textContent = checks.join("\n");
-
-    $("vars").textContent = JSON.stringify(out, null, 2);
-  }
-
   function setFormulas(){
     $("formulas").textContent =
-`Calculation Order (Rollover H/I do NOT impact current tab)
+`Calculation Order
 
 1) Z — Tab Limit
    Z = min(Y, T, A)
 
-2) D — Required Upfront Payment (H/I excluded)
-   D = max(0, A - (C + L) - Z)
+2) D — Required Upfront Payment (old expression)
+   D = max(0, A + (H + I) - (B + C + L) - (Z - B))
 
 3) Q — Tab Balance
    Q = max(0, A - (B + C + L) - D - E)
@@ -341,7 +311,7 @@
    Let F0 = max(0, A - (B + C + L) - G - D)
    E is clamped to E <= F0, then F = F0 - E.
 
-6) Totals (rollover impacts totals only)
+6) J and K Totals
    J = F + H
    K = G + I
 
@@ -349,6 +319,28 @@
    If rollover included (H > 0 or I > 0) => P = 0
    Else:
    P = max(0, O * [A - (C + L) - (D + E)])`;
+  }
+
+  function render(out){
+    $("outD").textContent = money(out.D);
+    $("outE").textContent = money(out.E);
+    $("outQ").textContent = money(out.Q);
+    $("outF").textContent = money(out.F);
+    $("outG").textContent = money(out.G);
+    $("outZ").textContent = money(out.Z);
+    $("outJ").textContent = money(out.J);
+    $("outK").textContent = money(out.K);
+    $("outN").textContent = money(out.N);
+    $("outP").textContent = money(out.P);
+
+    const checks = [];
+    checks.push(`Z <= A, Y, T: ${(out.Z <= out.A && out.Z <= out.Y && out.Z <= out.T) ? "OK" : "FAIL"}`);
+    checks.push(`E <= F0 (pre-voluntary tab charge): ${(out.E <= out.F0) ? "OK" : "FAIL"}${out.E_clamped ? " (requested E was clamped)" : ""}`);
+    checks.push(`Q == F + G: ${(Math.abs(out.Q_diff) < 0.0001) ? "OK" : "WARN"} (diff: ${out.Q_diff})`);
+    checks.push(`Rollover excludes prepayment: ${out.rolloverIncluded ? (out.P === 0 ? "OK" : "FAIL") : "N/A"}`);
+    $("checks").textContent = checks.join("\n");
+
+    $("vars").textContent = JSON.stringify(out, null, 2);
   }
 
   function run(){
@@ -375,7 +367,6 @@
     run();
   }
 
-  $("btnRun").addEventListener("click", run);
   $("btnReset").addEventListener("click", reset);
   $("btnCopy").addEventListener("click", async () => {
     const payload = { inputs: readInputs(), outputs: calculate(readInputs()) };
@@ -383,6 +374,7 @@
     alert("Copied JSON to clipboard.");
   });
 
+  // Auto-calc on input change
   ["T","Y","A","B","C","E","H","I","L","M","O","R"].forEach(id => {
     $(id).addEventListener("input", run);
   });
