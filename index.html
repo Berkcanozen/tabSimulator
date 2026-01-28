@@ -57,7 +57,6 @@
   <section class="card">
     <h2>Inputs</h2>
 
-    <!-- T and Y at the top -->
     <div class="field">
       <label for="T">T — Configurable Max Tab Limit</label>
       <input id="T" type="number" step="0.01" value="800" />
@@ -70,7 +69,6 @@
       <div class="hint">Remaining customer tab room after credit</div>
     </div>
 
-    <!-- Remaining inputs single column, alphabetical by letter -->
     <div class="field">
       <label for="A">A — MSRP</label>
       <input id="A" type="number" step="0.01" value="1200" />
@@ -98,13 +96,13 @@
     <div class="field">
       <label for="H">H — Rollover Tab Charge</label>
       <input id="H" type="number" step="0.01" value="0" />
-      <div class="hint">Old tab remaining charge</div>
+      <div class="hint">Old tab remaining charge (used only in J)</div>
     </div>
 
     <div class="field">
       <label for="I">I — Rollover Tab Savings</label>
       <input id="I" type="number" step="0.01" value="0" />
-      <div class="hint">Old tab remaining subsidy</div>
+      <div class="hint">Old tab remaining subsidy (used only in K)</div>
     </div>
 
     <div class="field">
@@ -211,10 +209,9 @@
     // 1) Z
     out.Z = Math.min(out.Y, out.T, out.A);
 
-    // 2) D (old expression as requested)
-    // D = A + (H + I) - (B + C + L) - (Z - B)
-    // NOTE: B cancels out algebraically, but kept as the "old" form.
-    out.D_raw = out.A + (out.H + out.I) - (out.B + out.C + out.L) - (out.Z - out.B);
+    // 2) D (rollover removed)
+    // D = A - (B + C + L) - (Z - B)
+    out.D_raw = out.A - (out.B + out.C + out.L) - (out.Z - out.B);
     out.D = Math.max(0, out.D_raw);
 
     // Voluntary upfront rule: E <= F0 where F0 is tab charge BEFORE applying E.
@@ -248,7 +245,7 @@
         out.E = newE;
         out.E_clamped = clamped;
 
-        // Final F (exact formula)
+        // Final F
         out.F_raw = out.A - (out.B + out.C + out.L) - out.G - (out.D + out.E);
         out.F = Math.max(0, out.F_raw);
         break;
@@ -271,7 +268,7 @@
       }
     }
 
-    // 6) J, K
+    // 6) J, K (rollover applied here only)
     out.J = out.F + out.H;
     out.K = out.G + out.I;
 
@@ -294,8 +291,8 @@
 1) Z — Tab Limit
    Z = min(Y, T, A)
 
-2) D — Required Upfront Payment (old expression)
-   D = max(0, A + (H + I) - (B + C + L) - (Z - B))
+2) D — Required Upfront Payment (rollover removed)
+   D = max(0, A - (B + C + L) - (Z - B))
 
 3) Q — Tab Balance
    Q = max(0, A - (B + C + L) - D - E)
@@ -374,7 +371,6 @@
     alert("Copied JSON to clipboard.");
   });
 
-  // Auto-calc on input change
   ["T","Y","A","B","C","E","H","I","L","M","O","R"].forEach(id => {
     $(id).addEventListener("input", run);
   });
